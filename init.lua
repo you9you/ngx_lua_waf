@@ -1,6 +1,6 @@
-require 'config'
+require '/usr/local/openresty/nginx/conf/waf/config'
 local match = string.match
-local ngxmatch=ngx.re.match
+local ngxmatch=ngx.re.find
 local unescape=ngx.unescape_uri
 local get_headers = ngx.req.get_headers
 local optionIsOn = function (options) return options == "on" and true or false end
@@ -14,13 +14,15 @@ PathInfoFix = optionIsOn(PathInfoFix)
 attacklog = optionIsOn(attacklog)
 CCDeny = optionIsOn(CCDeny)
 Redirect=optionIsOn(Redirect)
+
 function getClientIp()
-        IP  = ngx.var.remote_addr 
-        if IP == nil then
-                IP  = "unknown"
-        end
-        return IP
+    IP  = ngx.var.remote_addr 
+    if IP == nil then
+        IP  = "unknown"
+    end
+    return IP
 end
+
 function write(logfile,msg)
     local fd = io.open(logfile,"ab")
     if fd == nil then return end
@@ -28,6 +30,7 @@ function write(logfile,msg)
     fd:flush()
     fd:close()
 end
+
 function log(method,url,data,ruletag)
     if attacklog then
         local realIp = getClientIp()
@@ -86,37 +89,35 @@ function whiteurl()
     end
     return false
 end
+
 function fileExtCheck(ext)
     local items = Set(black_fileExt)
     ext=string.lower(ext)
     if ext then
         for rule in pairs(items) do
             if ngx.re.match(ext,rule,"isjo") then
-	        log('POST',ngx.var.request_uri,"-","file attack with ext "..ext)
-            say_html()
+                log('POST',ngx.var.request_uri,"-","file attack with ext "..ext)
+                say_html()
             end
         end
     end
     return false
 end
+
 function Set (list)
   local set = {}
   for _, l in ipairs(list) do set[l] = true end
   return set
 end
+
 function args()
     for _,rule in pairs(argsrules) do
         local args = ngx.req.get_uri_args()
         for key, val in pairs(args) do
             if type(val)=='table' then
-                 local t={}
-                 for k,v in pairs(val) do
-                    if v == true then
-                        v=""
-                    end
-                    table.insert(t,v)
+                if val ~= false then
+                    data=table.concat(val, " ")
                 end
-                data=table.concat(t, " ")
             else
                 data=val
             end
@@ -129,7 +130,6 @@ function args()
     end
     return false
 end
-
 
 function url()
     if UrlDeny then
@@ -146,6 +146,8 @@ end
 
 function ua()
     local ua = ngx.var.http_user_agent
+    ngxmatch(ua,"(.*)","isjo")
+
     if ua ~= nil then
         for _,rule in pairs(uarules) do
             if rule ~="" and ngxmatch(ua,rule,"isjo") then
@@ -157,6 +159,7 @@ function ua()
     end
     return false
 end
+
 function body(data)
     for _,rule in pairs(postrules) do
         if rule ~="" and data~="" and ngxmatch(unescape(data),rule,"isjo") then
@@ -167,6 +170,7 @@ function body(data)
     end
     return false
 end
+
 function cookie()
     local ck = ngx.var.http_cookie
     if CookieCheck and ck then
@@ -233,13 +237,13 @@ function whiteip()
 end
 
 function blockip()
-     if next(ipBlocklist) ~= nil then
-         for _,ip in pairs(ipBlocklist) do
-             if getClientIp()==ip then
-                 ngx.exit(403)
-                 return true
-             end
-         end
-     end
-         return false
+    if next(ipBlocklist) ~= nil then
+        for _,ip in pairs(ipBlocklist) do
+            if getClientIp()==ip then
+                ngx.exit(403)
+                return true
+            end
+        end
+    end
+    return false
 end
